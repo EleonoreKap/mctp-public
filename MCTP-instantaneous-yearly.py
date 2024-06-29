@@ -48,12 +48,13 @@ forcers_data
 forcers_data = forcers_data.loc[[
     #'carbon dioxide',
     #'methane', 'nitrous oxide',
-    'isoprene', 'ammonia', 'sulfur dioxide', 'acetaldehyde',
+    #'isoprene', 'ammonia', 'sulfur dioxide', 'acetaldehyde',
     #'trichloroethylene', 'methylethylketone', 'black carbon', 'benzene',
     #'tropospheric ozone', 'ethanol', 'acetone', 'carbon monoxide',
     #'HFC-161', 'HFC-152', 'HCFC-151', 'HCFC-141a', 'HCFC-131',
     #'methylbromide', 'HCFC-31'
-    ]] # here select chosen forcers from the list
+    "ethanol"
+    ]]
 
 n_forcers = len(forcers_data)
 
@@ -63,18 +64,18 @@ a_1 = 2.444e-01 # [unitless]
 a_2 = 3.360e-01 # [unitless] 
 a_3 = 2.073e-01 # [unitless] 
 
-alpha_1 = 3.364e+02 * 365 # [days]
-alpha_2 = 2.789e+01 * 365 # [days] 
-alpha_3 = 4.055e+00 * 365 # [days] 
+alpha_1 = 3.364e+02 # [years]  
+alpha_2 = 2.789e+01 # [years] 
+alpha_3 = 4.055e+00 # [years] 
 
 A_CO2_kg = 1.671361653979217e-15  #[Wm-2kg-1]
 A_CO2_ppm = 1.3086e-02 # [W m2 ppm CO21] radiative efficiency of CO2
 
 #ozone
-A_ozone_kg = 1.124e-12 #[Wm-2kg-1]
-lifetime_ozone = 23.4 # [days] 
+A_ozone_kg = 1.124e-12
+lifetime_ozone = 23.4/365
 
-forcers_data
+forcers_data["Lifetime [years]"] = forcers_data["Lifetime [days]"]/365
 
 
 #%%###########################################
@@ -85,7 +86,7 @@ forcers_data
 t_in = 2024
 
 # choose scenario
-scenario_name = "SSP2-4.5"
+scenario_name = "SSP3-7.0"
 
 def read_SSP_data(scenario_name):
     # get data
@@ -108,7 +109,7 @@ def read_SSP_data(scenario_name):
     last_year_RCP = RCP_dataframe.index[-1]
 
 
-    # maxima, initial value
+    # maxima
     max_temp_RCP = RCP_dataframe["Temperature"].max()
     max_conc_RCP = RCP_dataframe["RCP concentration"].max()
     ini_temp_RCP = RCP_dataframe["Temperature"].values[0]
@@ -118,12 +119,17 @@ def read_SSP_data(scenario_name):
 
 RCP_dataframe, max_temp_RCP, max_conc_RCP, ini_temp_RCP, last_year_RCP = read_SSP_data(scenario_name)
 
+last_year_RCP = RCP_dataframe.index[-1]
+argmax_temp_RCP = RCP_dataframe[RCP_dataframe["Temperature"]>=max_temp_RCP].index[0]
+
+
+
 
 #%%###########################################
 ##            USEFUL DATE TABLE             ##
 ##############################################
 
-# useful for e.g., frequent conversions to a day index to a date in day-month-year
+# approximately 5 seconds, improve efficiency
 
 date_table = pd.DataFrame()
 date_table["Year"] = range(t_in,2301)
@@ -149,25 +155,6 @@ date_table.drop(date_table[
 date_table
 
 
-#%%###########################################
-##      CONVERT SSP TO DAILY TIMESTEP       ##
-##############################################
-
-def convert_RCP_daily_timestep(RCP_dataframe):
-
-    RCP_dataframe_daily_timestep = RCP_dataframe.copy()
-    RCP_dataframe_daily_timestep["Day index"] = date_table.reset_index().groupby(date_table["Year"])["index"].min()
-    RCP_dataframe_daily_timestep.reset_index(inplace=True)
-    RCP_dataframe_daily_timestep.set_index("Day index", inplace=True)
-
-    RCP_dataframe_daily_timestep = RCP_dataframe_daily_timestep.reindex(index=date_table.index).interpolate(method="linear") # interpolate linearly
-
-    last_day_RCP_daily_timestep = RCP_dataframe_daily_timestep.index[-1]
-    argmax_temp_RCP = RCP_dataframe_daily_timestep[RCP_dataframe_daily_timestep["Temperature"]>=max_temp_RCP].index[0]
-
-    return RCP_dataframe_daily_timestep, last_day_RCP_daily_timestep, argmax_temp_RCP
-
-RCP_dataframe_daily_timestep, last_day_RCP_daily_timestep, argmax_temp_RCP = convert_RCP_daily_timestep(RCP_dataframe)
 
 
 #%%###########################################
@@ -189,7 +176,7 @@ tipping_points_original_data = pd.DataFrame({
     }).set_index("Tipping point id")
 
 
-def special_cases_tipping_thresholds(max_conc_RCP, ini_temp_RCP, max_temp_RCP):
+def special_cases_tipping_thresholds(RCP_dataframe, max_conc_RCP, ini_temp_RCP, max_temp_RCP):
 
     tipping_points_fixed_data = tipping_points_original_data.copy()
 
@@ -199,10 +186,10 @@ def special_cases_tipping_thresholds(max_conc_RCP, ini_temp_RCP, max_temp_RCP):
     ASI_upper_ppm = 1112
 
     if max_conc_RCP >= ASI_lower_ppm: #lower is reachable
-        ASI_lower_temp = RCP_dataframe_daily_timestep[RCP_dataframe_daily_timestep["RCP concentration"]>=ASI_lower_ppm]["Temperature"].values[0]
+        ASI_lower_temp = RCP_dataframe[RCP_dataframe["RCP concentration"]>=ASI_lower_ppm]["Temperature"].values[0]
 
         if max_conc_RCP >= ASI_upper_ppm: # lower and upper reachable
-            ASI_upper_temp = RCP_dataframe_daily_timestep[RCP_dataframe_daily_timestep["RCP concentration"]>=ASI_upper_ppm]["Temperature"].values[0]
+            ASI_upper_temp = RCP_dataframe[RCP_dataframe["RCP concentration"]>=ASI_upper_ppm]["Temperature"].values[0]
         else: # only lower reachable
             ASI_upper_temp = (max_temp_RCP - ASI_lower_temp)*(ASI_upper_ppm-ASI_lower_ppm)/(max_conc_RCP-ASI_lower_ppm)+ASI_lower_temp # same scale as for ppm
 
@@ -234,13 +221,14 @@ def special_cases_tipping_thresholds(max_conc_RCP, ini_temp_RCP, max_temp_RCP):
 
     return tipping_points_fixed_data.dropna()
 
-tipping_points_fixed_data = special_cases_tipping_thresholds(max_conc_RCP, ini_temp_RCP, max_temp_RCP)
+tipping_points_fixed_data = special_cases_tipping_thresholds(RCP_dataframe, max_conc_RCP, ini_temp_RCP, max_temp_RCP)
 tipping_points_fixed_data
 
 #%%###########################################
 ##       TIPPING POINTS IMPACTS DATA        ##
 ##############################################
 
+#tipping_impacts_path = "Serenas_CTP_calc_data_v4.xlsx"
 tipping_impacts_path = "Tipping_impacts.xlsx"
 tipping_impacts_dataframe = pd.read_excel(tipping_impacts_path, sheet_name='Data',
                      usecols="G:Y", skiprows=6, nrows=500, header=None)
@@ -253,7 +241,7 @@ tipping_impacts_dataframe
 ##     RANDOMIZE TEMPERATURE THRESHOLDS     ##
 ##############################################
 
-def randomize_temperature_thresholds(tipping_points_original_data:pd.DataFrame, RCP_dataframe_daily_timestep:pd.DataFrame):
+def randomize_temperature_thresholds(tipping_points_original_data:pd.DataFrame, RCP_dataframe:pd.DataFrame):
 
     """
     Takes the original tipping points data and returns a new dataframe with the selected tipping points along with their trigger temperature (picked at random).
@@ -270,7 +258,7 @@ def randomize_temperature_thresholds(tipping_points_original_data:pd.DataFrame, 
     """
 
     selected_tipping_points_dataframe = tipping_points_original_data.copy() # Copy the original dataframe to avoid modifying it
-    RCP_dataframe_daily_timestep_short = RCP_dataframe_daily_timestep.loc[:argmax_temp_RCP]
+    RCP_dataframe_short = RCP_dataframe.loc[:argmax_temp_RCP]
 
     selected_tipping_points_dataframe["Temp. triang. loc"] = selected_tipping_points_dataframe["Temp. triang. lower"]
     selected_tipping_points_dataframe["Temp. triang. scale"] = selected_tipping_points_dataframe["Temp. triang. upper"] - selected_tipping_points_dataframe["Temp. triang. lower"]
@@ -286,11 +274,11 @@ def randomize_temperature_thresholds(tipping_points_original_data:pd.DataFrame, 
         temperature = triang_pd.rvs() # Generate a random temperature
 
         if temperature < max_temp_RCP:  # Check if the temperature falls within the attainable temperatures in the chosen RCP
-            temperature = find_nearest(RCP_dataframe_daily_timestep_short["Temperature"], temperature) # Find the nearest attainable temperature in the RCP
+            temperature = find_nearest(RCP_dataframe_short["Temperature"], temperature) # Find the nearest attainable temperature in the RCP
             while any(temperature == t for t in selected_tipping_points_dataframe["Random temperature"]): # Check if the temperature has already been selected for another tipping point
                 temperature = triang_pd.rvs() # If so, generate a new random temperature
                 if temperature < max_temp_RCP:
-                    temperature = find_nearest(RCP_dataframe_daily_timestep_short["Temperature"], temperature)
+                    temperature = find_nearest(RCP_dataframe_short["Temperature"], temperature)
                 else:
                     temperature = np.nan  # Set temperature to NaN if it exceeds the atteinable temperatures, since the tipping point cannot be triggered
         else:
@@ -302,7 +290,7 @@ def randomize_temperature_thresholds(tipping_points_original_data:pd.DataFrame, 
 
     return selected_tipping_points_dataframe.drop(["Temp. triang. c","Temp. triang. loc","Temp. triang. scale"], axis=1)
 
-selected_tipping_points_dataframe = randomize_temperature_thresholds(tipping_points_fixed_data, RCP_dataframe_daily_timestep)
+selected_tipping_points_dataframe = randomize_temperature_thresholds(tipping_points_fixed_data, RCP_dataframe)
 selected_tipping_points_dataframe
 
 
@@ -311,7 +299,7 @@ selected_tipping_points_dataframe
 ##          RETRIEVE CONCENTRATION          ##
 ##############################################
     
-def order_tipping_points(selected_tipping_points_dataframe:pd.DataFrame, RCP_dataframe_daily_timestep:pd.DataFrame):
+def order_tipping_points(selected_tipping_points_dataframe:pd.DataFrame, RCP_dataframe:pd.DataFrame):
     """
     Assigns an order to selected tipping points based on the order of their trigger temperatures,
     and joins the corresponding year and concentration in the given RCP, based on these temperatures.
@@ -326,12 +314,12 @@ def order_tipping_points(selected_tipping_points_dataframe:pd.DataFrame, RCP_dat
 
     selected_tipping_points_dataframe["Order"] = selected_tipping_points_dataframe["Random temperature"].rank().astype(int) # Assign order based on the rank of trigger temperatures
     selected_tipping_points_dataframe["RCP concentration"] = selected_tipping_points_dataframe["Random temperature"].map(
-        lambda temp: RCP_dataframe_daily_timestep[RCP_dataframe_daily_timestep["Temperature"]==temp]["RCP concentration"].values[0]
+        lambda temp: RCP_dataframe[RCP_dataframe["Temperature"]==temp]["RCP concentration"].values[0]
         )
 
     return selected_tipping_points_dataframe[["Order", "RCP concentration"]]
 
-selected_tipping_points_dataframe[["Order", "RCP concentration"]] = order_tipping_points(selected_tipping_points_dataframe, RCP_dataframe_daily_timestep)
+selected_tipping_points_dataframe[["Order", "RCP concentration"]] = order_tipping_points(selected_tipping_points_dataframe, RCP_dataframe)
 selected_tipping_points_dataframe
 
 
@@ -342,7 +330,7 @@ selected_tipping_points_dataframe
 ##           INCREASED BACKGROUND           ##
 ##############################################
 
-def compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe_daily_timestep:pd.DataFrame, selected_tipping_points_dataframe:pd.DataFrame, tipping_impacts_dataframe:pd.DataFrame, include_tipping_impacts:bool=True):
+def compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe:pd.DataFrame, selected_tipping_points_dataframe:pd.DataFrame, tipping_impacts_dataframe:pd.DataFrame, include_tipping_impacts:bool=True):
     """
     Computes the year for each tipping point, as the year where the sum of the RCP and the cascading effects from previous tipping points reaches the threshold.
 
@@ -352,12 +340,12 @@ def compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe_d
     tipping_impacts_dataframe (pd.DataFrame): DataFrame containing data of cascading effects
     include_tipping_impacts (bool): where to include cascading effects
     """
-
+    
     n_tipping_points = len(selected_tipping_points_dataframe) # Number of selected tipping points
 
-    RCP_including_impacts_daily_timestep = RCP_dataframe_daily_timestep.copy()
-    RCP_including_impacts_daily_timestep["Concentration including impacts"] = RCP_including_impacts_daily_timestep["RCP concentration"] # Initialize column for updated concentrations with impacts with original concentrations
-    selected_tipping_points_dataframe["Day index (with tipping impacts)"] = np.nan # Initialize column for rectified years
+    RCP_including_impacts = RCP_dataframe.copy()
+    RCP_including_impacts["Concentration including impacts"] = RCP_including_impacts["RCP concentration"] # Initialize column for updated concentrations with impacts with original concentrations
+    selected_tipping_points_dataframe["Year (with tipping impacts)"] = np.nan # Initialize column for rectified years
 
     # Iterate over each tipping point by its order
     for tipping_point_rank in range(1, n_tipping_points+1):
@@ -365,51 +353,37 @@ def compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe_d
         concentration_at_tipping = selected_tipping_points_dataframe.loc[tipping_point_id]["RCP concentration"] # Get concentration at tipping point
 
         # Compute day, year, and day in year of tipping
-        day = RCP_including_impacts_daily_timestep[concentration_at_tipping <= RCP_including_impacts_daily_timestep["Concentration including impacts"]].index[0] # Find the rectified day as the first day where the background concentration (including impacts) exceeds the tipping concentration
-        year = date_table[date_table.index == day]["Year"].values[0]
-        day_in_year = date_table[date_table.index == day]["Day in year"].values[0]
-
-        if day_in_year=="366":
-            day_in_year="365"
-            day-=1
+        year = RCP_including_impacts[concentration_at_tipping <= RCP_including_impacts["Concentration including impacts"]].index[0] # Find the rectified year as the first year where the background concentration (including impacts) exceeds the tipping concentration
 
         # Store day, year, and day in year of tipping
-        selected_tipping_points_dataframe.loc[tipping_point_id,"Day index (with tipping impacts)"] = day
         selected_tipping_points_dataframe.loc[tipping_point_id,"Year (with tipping impacts)"] = year
-        selected_tipping_points_dataframe.loc[tipping_point_id,"Day in year (with tipping impacts)"] = day_in_year
 
-        if include_tipping_impacts:
-            # Add impact from tipping to background concentration
-            impacts_one_tipping_point = pd.DataFrame(tipping_impacts_dataframe[tipping_point_id])
-            impacts_one_tipping_point.index += year
-            impacts_one_tipping_point.drop(
-                impacts_one_tipping_point[impacts_one_tipping_point.index >= last_year_RCP].index, inplace=True
-                )
-            
-            impacts_one_tipping_point["Day index"] = date_table[(date_table["Day in year"]==day_in_year) & (date_table["Year"]>=year) & (date_table["Year"]<last_year_RCP)].index
-            impacts_one_tipping_point.set_index("Day index", inplace=True)
-            impacts_one_tipping_point = impacts_one_tipping_point.reindex(index=date_table.index, method="ffill").fillna(0)
+        # Tipping impacts
+        RCP_including_impacts.loc[year:, "Concentration including impacts"] += tipping_impacts_dataframe[tipping_point_id][:last_year_RCP-year+1].to_numpy() # Update background concentration from the rectified year onward, adding the impact of the tipping point
 
-            RCP_including_impacts_daily_timestep["Concentration including impacts"] += impacts_one_tipping_point[tipping_point_id]
+        #if (impacts_one_tipping_point[tipping_point_id]>0).sum()>0: ## for plotting only
+        #    test.append(RCP_including_impacts["Concentration including impacts"].rename(tipping_point_rank))
 
-    return selected_tipping_points_dataframe[["Day index (with tipping impacts)", "Year (with tipping impacts)"]], RCP_including_impacts_daily_timestep.drop("Temperature", axis=1)
+    return selected_tipping_points_dataframe["Year (with tipping impacts)"], RCP_including_impacts.drop("Temperature", axis=1)
 
-(selected_tipping_points_dataframe[["Day index (with tipping impacts)", "Year (with tipping impacts)"]], RCP_including_impacts_daily_timestep
- ) = compute_concentrations_with_tipping_impacts_and_rectify_year(
-        RCP_dataframe_daily_timestep, selected_tipping_points_dataframe, tipping_impacts_dataframe,
+(
+    selected_tipping_points_dataframe["Year (with tipping impacts)"],
+    RCP_including_impacts
+    ) = compute_concentrations_with_tipping_impacts_and_rectify_year(
+        RCP_dataframe, selected_tipping_points_dataframe, tipping_impacts_dataframe,
         )
 
-
-
+#RCP_including_impacts
+selected_tipping_points_dataframe.dropna()
 
 #%%###########################################
-##       COMPUTE REMAINING CAPACITIES       ##
+##     COMPUTE INSTANTANEOUS CAPACITIES     ##
 ##############################################
 
-def compute_capacities(RCP_including_impacts_daily_timestep:pd.DataFrame, selected_tipping_points_dataframe:pd.DataFrame):
+def compute_instantaneous_capacities(RCP_including_impacts:pd.DataFrame, selected_tipping_points_dataframe:pd.DataFrame):
     """
     For each tipping point, computes the carrying capacity over time,
-    given as the difference between the tipping concentration and the background concentration, summed between the current year and the tipping year.
+    given as the difference between the tipping concentration and the background concentration
     
     Parameters:
     RCP_including_impacts (pd.DataFrame): DataFrame containing computed the background concentration including tipping impacts over time.
@@ -420,39 +394,43 @@ def compute_capacities(RCP_including_impacts_daily_timestep:pd.DataFrame, select
     """
 
     n_tipping_points = len(selected_tipping_points_dataframe) # Number of selected tipping points
-    capacities = pd.DataFrame(index = RCP_including_impacts_daily_timestep.index)
+    capacities = pd.DataFrame(index = RCP_including_impacts.index,
+                              columns = [f"capacityTP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1)]
+                              )
 
     # Iterate over each tipping point by its order
     for tipping_point_rank in range(1,n_tipping_points+1):
         tipping_point_id = selected_tipping_points_dataframe[selected_tipping_points_dataframe["Order"] == tipping_point_rank].index[0] # Get tipping point ID
-        day_index = selected_tipping_points_dataframe.loc[tipping_point_id]["Day index (with tipping impacts)"] # Get rectified day
+        year = selected_tipping_points_dataframe.loc[tipping_point_id]["Year (with tipping impacts)"] # Get day
+
         concentration_at_tipping = selected_tipping_points_dataframe.loc[tipping_point_id]["RCP concentration"] # Get concentration at tipping point
 
-        capacities[f"diffTP{tipping_point_rank}"] = (concentration_at_tipping - RCP_including_impacts_daily_timestep["Concentration including impacts"])[RCP_including_impacts_daily_timestep.index < day_index] # Compute difference between tipping concentration and background concentration (including tipping impacts), for each year until the rectified tipping year
-        capacities[f"diffTP{tipping_point_rank}"] = capacities[f"diffTP{tipping_point_rank}"][capacities[f"diffTP{tipping_point_rank}"]>=0] # If we use year instead of rectified year, there are a few years where the background concentration (including impacts) is greater than the tipping concentration
-        capacities[f"capacityTP{tipping_point_rank}"] = capacities.loc[::-1, f"diffTP{tipping_point_rank}"].cumsum()[::-1] # Compute capacity as the cumulative sum of differences
+        capacities[f"capacityTP{tipping_point_rank}"] = (concentration_at_tipping - RCP_including_impacts["Concentration including impacts"])[RCP_including_impacts.index < year] # Compute difference between tipping concentration and background concentration (including tipping impacts), for each year until the rectified tipping year
+        if year>t_in:
+            smallest_capacity = capacities.loc[year-1,f"capacityTP{tipping_point_rank}"]
+            capacities[f"capacityTP{tipping_point_rank}"] = capacities[f"capacityTP{tipping_point_rank}"]- smallest_capacity
+    return capacities.reset_index(drop=True) 
 
-    return(capacities[[f"capacityTP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1)]]) # return only capacity columns
+instantaneous_capacities = compute_instantaneous_capacities(RCP_including_impacts, selected_tipping_points_dataframe)
 
-capacities_daily_timestep = compute_capacities(RCP_including_impacts_daily_timestep, selected_tipping_points_dataframe)
-capacities_daily_timestep
+instantaneous_capacities.plot()
+
 
 
 
 
 #%%###########################################
-##         COMPUTE EMISSIONS IMPACT         ##
+##  COMPUTE INSTANTANEOUS EMISSIONS IMPACT  ##
 ##############################################
 
 # impact is the radiative forcing cause by a pulse emission
 # (radiative efficiency * abundance defined by the impulse response function)
-# integrated between year of emission and year of tipping
 
 # storing the impacts for all dates, all tipping points, all forcers, requires a very large dataframe, Python can complain that it's fragmented; ignore the warning.
 
-def compute_emission_impacts(selected_tipping_points_dataframe:pd.DataFrame, emission_times:pd.Index, include_ozone:bool=True):
+def compute_instantaneous_emission_impacts(emission_times:pd.Index, include_ozone:bool=True):
     """
-    Computes emission impacts for all forcers and all tipping points.
+    Computes emission impacts for all forcers as instantaneous radiative forcing
     
     Parameters:
     emission_times (pd.Index): Index containing emission days for which we want to compute impacts.
@@ -463,55 +441,52 @@ def compute_emission_impacts(selected_tipping_points_dataframe:pd.DataFrame, emi
     pd.impacts_daily_timestep (pd.DataFrame): impacts over time for each tipping point and each forcer
     """
 
-    n_tipping_points = len(selected_tipping_points_dataframe) # Number of selected tipping points
-    impacts_daily_timestep = pd.DataFrame(index=emission_times,
-                                          columns=([f"Impact {forcer_name} TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1) for forcer_name in forcers_data.index]
-                                                   + [f"Impact {forcer_name} with ozone TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1) for forcer_name in forcers_data.index]
-                                                   ))
+    if include_ozone:
+        instantaneous_impacts = pd.DataFrame(#index=emission_times,
+                                            columns=([f"Impact {forcer_name}" for forcer_name in forcers_data.index]
+                                                    + [f"Impact {forcer_name} with ozone" for forcer_name in forcers_data.index]
+                                                    ))
+    else:
+        instantaneous_impacts = pd.DataFrame(#index=emission_times,
+                                            columns=([f"Impact {forcer_name}" for forcer_name in forcers_data.index]
+                                                    ))
+    # iterate over each simple forcer
+    for forcer_id in range(n_forcers):
+        '''if forcers_data.iloc[forcer_id].name=="CO2":
+            instantaneous_impactsf"Impact CO2 TP{tipping_point_rank}"] = emission_times.map(lambda emission_time: compute_impact_CO2_model(emission_time, rectified_year)) # Apply the 'compute_impact_CO2_model' function to obtain the impact of CO2 on each tipping point over all emission years
+        else:'''
+        forcer_name = forcers_data.iloc[forcer_id].name # Get forcer name
+        A_forcer_kg = forcers_data["Radiative efficiency [W m-2 kg-1]"][forcer_name] # Get forcer radiative efficiency
+        lifetime_forcer = forcers_data["Lifetime [years]"][forcer_name] # Get forcer lifetime
+        MIR_forcer = forcers_data["MIR [g_ozone/g_compound]"][[forcer_name]].fillna(0).values[0] # Get forcer MIR
 
-    # Iterate over each tipping point by its order
-    for tipping_point_rank in range(1,n_tipping_points+1):
-        tipping_point_id = selected_tipping_points_dataframe[selected_tipping_points_dataframe["Order"] == tipping_point_rank].index[0] # Get tipping point ID
-        day = selected_tipping_points_dataframe.loc[tipping_point_id]["Day index (with tipping impacts)"] # Get rectified year
+        if forcer_name=="carbon dioxide":
+            arg_of_exp1 = (- pd.Series(range(len(emission_times))) / alpha_1); term1 = a_1 * arg_of_exp1.loc[arg_of_exp1 <= 0].rpow(np.e)
+            arg_of_exp2 = (- pd.Series(range(len(emission_times))) / alpha_2); term2 = a_2 * arg_of_exp2.loc[arg_of_exp2 <= 0].rpow(np.e)
+            arg_of_exp3 = (- pd.Series(range(len(emission_times))) / alpha_3); term3 = a_3 * arg_of_exp3.loc[arg_of_exp3 <= 0].rpow(np.e)
+            instantaneous_impacts[f"Impact {forcer_name}"] = A_CO2_kg * (a_0 + term1 + term2 + term3) / A_CO2_ppm
+        else:
+            arg_of_exp = (- pd.Series(range(len(emission_times))) / lifetime_forcer)
+            instantaneous_impacts[f"Impact {forcer_name}"] = A_forcer_kg * arg_of_exp.loc[arg_of_exp <= 0].rpow(np.e) / A_CO2_ppm
 
-        # iterate over each simple forcer
-        for forcer_id in range(n_forcers):
+        if include_ozone:
+            instantaneous_impacts[f"Impact {forcer_name} with ozone"] = instantaneous_impacts[f"Impact {forcer_name}"]
+            arg_of_exp_with_ozone = (- pd.Series(range(len(emission_times))) / lifetime_ozone)
+            instantaneous_impacts.loc[arg_of_exp_with_ozone <= 0, f"Impact {forcer_name} with ozone"] += MIR_forcer * A_ozone_kg * arg_of_exp_with_ozone.loc[arg_of_exp_with_ozone <= 0].rpow(np.e) / A_CO2_ppm
 
-            forcer_name = forcers_data.iloc[forcer_id].name # Get forcer name
-            A_forcer_kg = forcers_data["Radiative efficiency [W m-2 kg-1]"][forcer_name] # Get forcer radiative efficiency
-            lifetime_forcer = forcers_data["Lifetime [days]"][forcer_name] # Get forcer lifetime
-            MIR_forcer = forcers_data["MIR [g_ozone/g_compound]"][[forcer_name]].fillna(0).values[0] # Get forcer MIR
-            
-            impacts_daily_timestep[f"Impact {forcer_name} TP{tipping_point_rank}"] = np.nan
+    return instantaneous_impacts
 
-            if forcer_name=="carbon dioxide":
-                term0 = pd.Series(a_0 * (day - emission_times), index = emission_times)
-                arg_of_exp1 = (- (day - pd.Series(emission_times)) / alpha_1); term1 = a_1 * alpha_1 * (1 - arg_of_exp1.loc[arg_of_exp1 <= 0].rpow(np.e))
-                arg_of_exp2 = (- (day - pd.Series(emission_times)) / alpha_2); term2 = a_2 * alpha_2 * (1 - arg_of_exp2.loc[arg_of_exp2 <= 0].rpow(np.e))
-                arg_of_exp3 = (- (day - pd.Series(emission_times)) / alpha_3); term3 = a_3 * alpha_3 * (1 - arg_of_exp3.loc[arg_of_exp3 <= 0].rpow(np.e))
-                impacts_daily_timestep.loc[arg_of_exp1 <= 0, f"Impact {forcer_name} TP{tipping_point_rank}"] = A_CO2_kg * (term0 + term1 + term2 + term3) / A_CO2_ppm
-            else:
-                arg_of_exp = (- (day - pd.Series(emission_times)) / lifetime_forcer)
-                impacts_daily_timestep.loc[arg_of_exp <= 0, f"Impact {forcer_name} TP{tipping_point_rank}"] = A_forcer_kg * lifetime_forcer * (1 - arg_of_exp.loc[arg_of_exp <= 0].rpow(np.e)) / A_CO2_ppm
-
-            if include_ozone:
-                impacts_daily_timestep[f"Impact {forcer_name} with ozone TP{tipping_point_rank}"] = impacts_daily_timestep[f"Impact {forcer_name} TP{tipping_point_rank}"]
-                arg_of_exp_with_ozone = (- (day - pd.Series(emission_times)) / lifetime_ozone)
-                impacts_daily_timestep.loc[arg_of_exp_with_ozone <= 0, f"Impact {forcer_name} with ozone TP{tipping_point_rank}"] += MIR_forcer * A_ozone_kg * lifetime_ozone * (1 - arg_of_exp_with_ozone.loc[arg_of_exp_with_ozone <= 0].rpow(np.e)) / A_CO2_ppm
-
-    return impacts_daily_timestep
-
-impacts_daily_timestep = compute_emission_impacts(selected_tipping_points_dataframe, RCP_dataframe_daily_timestep.index)
-impacts_daily_timestep
+instantaneous_impacts = compute_instantaneous_emission_impacts(RCP_dataframe.index, include_ozone=False)
+instantaneous_impacts.plot()
 
 
 #%%###########################################
-##               COMPUTE CTP                ##
+##         COMPUTE INSTANTANEOUS CTP        ##
 ##############################################
 
-# storing the CTP for all dates, all tipping points, all forcers, requires a very large dataframe, Python can complain that it's fragmented; ignore the warning.
-    
-def compute_CTP(capacities_daily_timestep:pd.DataFrame, impacts_daily_timestep:pd.DataFrame, n_tipping_points:int, epsilon:int=0, include_ozone:bool=True):
+# 47s for 1 forcer, all TP
+
+def compute_instantaneous_CTP(instantaneous_capacities:pd.DataFrame, instantaneous_impacts:pd.DataFrame, n_tipping_points:int, epsilon:int=0, include_ozone:bool=True):
     """
     Computes Climate Tipping Potential (CTP) values for each tipping point and each forcer, based on computed impacts and capacities.
     
@@ -527,41 +502,55 @@ def compute_CTP(capacities_daily_timestep:pd.DataFrame, impacts_daily_timestep:p
     """
 
     if not include_ozone:
-        CTP = pd.DataFrame(index = impacts_daily_timestep.index,
+        CTP = pd.DataFrame(index = instantaneous_impacts.index,
                        columns=([f"CTP {forcer_name} TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1) for forcer_name in forcers_data.index]
                                 ))
         
     else:
-        CTP = pd.DataFrame(index = impacts_daily_timestep.index,
+        CTP = pd.DataFrame(index = instantaneous_impacts.index,
                        columns=([f"CTP {forcer_name} TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1) for forcer_name in forcers_data.index]
                                 + [f"CTP {forcer_name} with ozone TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1) for forcer_name in forcers_data.index]
                                 ))
+        
+    n_days = len(instantaneous_capacities.index)
 
     # Iterate over each tipping point by its order
-    for tipping_point_rank in range(1,n_tipping_points+1):
-            
-        # Iterate over each simple forcer
-        for forcer_id in range(n_forcers):
+    for tipping_point_rank in range(1,n_tipping_points+1): #attention#
+        year = selected_tipping_points_dataframe.loc[selected_tipping_points_dataframe["Order"]==tipping_point_rank, "Year (with tipping impacts)"].values[0]-t_in
 
+        # Iterate over each simple forcer
+        for forcer_id in range(n_forcers): #attention#
             forcer_name = forcers_data.iloc[forcer_id].name
 
-            CTP[f"CTP {forcer_name} TP{tipping_point_rank}"] = impacts_daily_timestep[f"Impact {forcer_name} TP{tipping_point_rank}"] / (capacities_daily_timestep[f"capacityTP{tipping_point_rank}"]+epsilon) # Compute CTP values for each simple forcer
-            if include_ozone==True:
-                CTP[f"CTP {forcer_name} with ozone TP{tipping_point_rank}"] = impacts_daily_timestep[f"Impact {forcer_name} with ozone TP{tipping_point_rank}"] / (capacities_daily_timestep[f"capacityTP{tipping_point_rank}"]+epsilon)
-    
-    return CTP.join(date_table).groupby("Year")[[column for column in CTP.columns if "CTP" in column]].mean()
+            capa_inv = pd.Series(index=instantaneous_capacities.index)
+            capa_inv.loc[instantaneous_capacities[f"capacityTP{tipping_point_rank}"]>0] = 1/(instantaneous_capacities[f"capacityTP{tipping_point_rank}"]+epsilon)
+            capa_inv.fillna(0, inplace=True)
 
-CTP = compute_CTP(capacities_daily_timestep, impacts_daily_timestep, len(selected_tipping_points_dataframe), epsilon=100)
+            capa_inv_flip = np.flip(capa_inv.to_numpy())
+
+            CTP_flip = np.convolve(instantaneous_impacts[f"Impact {forcer_name}"], capa_inv_flip)
+            CTP[f"CTP {forcer_name} TP{tipping_point_rank}"] = np.flip(CTP_flip)[n_days-1:]
+            CTP[f"CTP {forcer_name} TP{tipping_point_rank}"] = CTP[f"CTP {forcer_name} TP{tipping_point_rank}"] / (pd.Series(year-instantaneous_capacities.index).map(lambda x: max(x,0)))
+
+            if include_ozone:
+                CTP_flip = np.convolve(instantaneous_impacts[f"Impact {forcer_name} with ozone"], capa_inv_flip)
+                CTP[f"CTP {forcer_name} with ozone TP{tipping_point_rank}"] = np.flip(CTP_flip)[n_days-1:]
+                CTP[f"CTP {forcer_name} with ozone TP{tipping_point_rank}"] = CTP[f"CTP {forcer_name} with ozone TP{tipping_point_rank}"] / (pd.Series(year-instantaneous_capacities.index).map(lambda x: max(x,0)))
+
+
+    return CTP #CTP.join(date_table).groupby("Year")[[column for column in CTP.columns if "CTP" in column]].mean()
+
+CTP = compute_instantaneous_CTP(instantaneous_capacities, instantaneous_impacts,
+                                len(selected_tipping_points_dataframe), epsilon=0.01, include_ozone=False
+                                )
 CTP.plot()
-
-
 
 #%%###########################################
 ##               COMPUTE MCTP               ##
 ##############################################
   
 
-def compute_MCTP(CTP:pd.DataFrame, n_tipping_points:int, include_ozone:bool=True):
+def compute_MCTP(CTP:pd.DataFrame, n_tipping_points:int, include_ozone:bool=True): # shouldn't we divide by the number of tipping points?
     """
     Computes Multi Climate Tipping Potential (MCTP) values for each forcer, as the sum of computed CTP values accross all tipping points.
     
@@ -577,7 +566,9 @@ def compute_MCTP(CTP:pd.DataFrame, n_tipping_points:int, include_ozone:bool=True
 
     # Iterate over each simple forcer
     for forcer_id in range(n_forcers):
-        
+        '''if forcers_data.iloc[forcer_id].name=="CO2":
+            MCTP["MCTP CO2"] = CTP[[f"CTP CO2 TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1)]].sum(min_count=1, axis=1) # Compute MCTP values for CO2 by summing CTP values for each tipping point
+        else:'''
         forcer_name = forcers_data.iloc[forcer_id].name # Get forcer name
         MCTP[f"MCTP {forcer_name}"] = CTP[[f"CTP {forcer_name} TP{tipping_point_rank}" for tipping_point_rank in range(1,n_tipping_points+1)]].sum(min_count=1, axis=1)
 
@@ -588,7 +579,8 @@ def compute_MCTP(CTP:pd.DataFrame, n_tipping_points:int, include_ozone:bool=True
     # Return only the MCTP columns
     return(MCTP[MCTP>0])
 
-MCTP = compute_MCTP(CTP, len(selected_tipping_points_dataframe), include_ozone=True)
+MCTP = compute_MCTP(CTP, len(selected_tipping_points_dataframe), include_ozone=False)
+#MCTP = MCTP.reset_index().set_index(date_table["Date as fraction"])
 MCTP.plot()
 
 
@@ -600,7 +592,7 @@ MCTP.plot()
 
 #Parameters
 n_iterations = 2
-epsilon = 20
+epsilon = 1
 include_ozone = False
 str_ozone = " with ozone" if include_ozone else ""
 include_tipping_impacts = True
@@ -619,17 +611,19 @@ for scenario_name in [
     "SSP2-4.5",
     "SSP3-7.0",
     "SSP5-8.5"
-    ]: # select scenarios
+    ]:
 
     tipping_points = tipping_points_original_data.copy()
 
     # read RCP data
     RCP_dataframe, max_temp_RCP, max_conc_RCP, ini_temp_RCP, last_year_RCP = read_SSP_data(scenario_name)
     # convert to daily timestep
-    RCP_dataframe_daily_timestep, last_day_RCP_daily_timestep, argmax_temp_RCP = convert_RCP_daily_timestep(RCP_dataframe)
+    # RCP_dataframe_daily_timestep, last_day_RCP_daily_timestep, argmax_temp_RCP = convert_RCP_daily_timestep(RCP_dataframe)
+    last_year_RCP = RCP_dataframe.index[-1]
+    argmax_temp_RCP = RCP_dataframe[RCP_dataframe["Temperature"]>=max_temp_RCP].index[0]
 
     # Thresholds of tipping points out of bounds
-    tipping_points_fixed_data = special_cases_tipping_thresholds(max_conc_RCP, ini_temp_RCP, max_temp_RCP)
+    tipping_points_fixed_data = special_cases_tipping_thresholds(RCP_dataframe, max_conc_RCP, ini_temp_RCP, max_temp_RCP)
 
     ######### Monte-Carlo starts here #########
     tic = time.time()
@@ -643,24 +637,20 @@ for scenario_name in [
     # Iterate n_iterations times
     for it in range(n_iterations):
 
-        selected_tipping_points_dataframe = randomize_temperature_thresholds(tipping_points_fixed_data, RCP_dataframe_daily_timestep) # Randomize temperature thresholds and determine selected tipping points
-        selected_tipping_points_dataframe[["Order", "RCP concentration"]] = order_tipping_points(selected_tipping_points_dataframe, RCP_dataframe_daily_timestep) # Assign an order to tipping points and joins corresponding temperature and year
+        selected_tipping_points_dataframe = randomize_temperature_thresholds(tipping_points_fixed_data, RCP_dataframe) # Randomize temperature thresholds and determine selected tipping points
+        selected_tipping_points_dataframe[["Order", "RCP concentration"]] = order_tipping_points(selected_tipping_points_dataframe, RCP_dataframe) # Assign an order to tipping points and joins corresponding temperature and year
 
-        selected_tipping_points_dataframe[
-            ["Rectified day index (with tipping impacts)",
-             "Rectified year (with tipping impacts)"]
-             ], RCP_including_impacts_daily_timestep = compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe_daily_timestep, selected_tipping_points_dataframe, tipping_impacts_dataframe, include_tipping_impacts)
+        selected_tipping_points_dataframe["Year (with tipping impacts)"], RCP_including_impacts = compute_concentrations_with_tipping_impacts_and_rectify_year(RCP_dataframe, selected_tipping_points_dataframe, tipping_impacts_dataframe, include_tipping_impacts)
         
         tipping_points = pd.concat([
             tipping_points,
-            selected_tipping_points_dataframe["Rectified year (with tipping impacts)"].rename(it),
+            selected_tipping_points_dataframe["Year (with tipping impacts)"].rename(it),
             selected_tipping_points_dataframe["RCP concentration"].rename(f"{it}-conc")
             ],axis=1)
         
-
-        capacities_daily_timestep = compute_capacities(RCP_including_impacts_daily_timestep, selected_tipping_points_dataframe) # compute carrying capacity over time of each tipping element
-        impacts_daily_timestep = compute_emission_impacts(selected_tipping_points_dataframe, RCP_dataframe_daily_timestep.index, include_ozone=include_ozone) # compute impacts of each forcer on each tipping point, over all emission years
-        CTP = compute_CTP(capacities_daily_timestep, impacts_daily_timestep, len(selected_tipping_points_dataframe), epsilon, include_ozone)
+        instantaneous_capacities = compute_instantaneous_capacities(RCP_including_impacts, selected_tipping_points_dataframe) # compute carrying capacity over time of each tipping element
+        instantaneous_impacts = compute_instantaneous_emission_impacts(RCP_dataframe.index, include_ozone=include_ozone) # compute impacts of each forcer on each tipping point, over all emission years
+        CTP = compute_instantaneous_CTP(instantaneous_capacities, instantaneous_impacts, len(selected_tipping_points_dataframe), epsilon=epsilon, include_ozone=include_ozone)
     
         MCTP = compute_MCTP(CTP, len(selected_tipping_points_dataframe), include_ozone) # compute the climate tipping potential of each forcer, over all emission years, as the sum of climate tipping potentials for individual tipping point
 
@@ -673,7 +663,7 @@ for scenario_name in [
             
         if it%300==0:
             tac = time.time()
-            print(f"end it. no. {it}, t.: {int(tac-tic)} sec., est. t. (this scenario): {int((tac-tic) * (n_iterations/(it+1)))} sec.")
+            print(f"end it. no. {it}, t.: {int(tac-tic)} sec., est. total t.: {int((tac-tic) * (n_iterations/(it+1)))} sec.")
 
     #last valid date
     max_date_valid = max([np.sum(~np.isnan(list_of_MCTP_for_all_forcers[0][it])) for it in range(n_iterations)])
@@ -706,7 +696,7 @@ for scenario_name in [
             ).transpose()
         stats_for_one_forcer = stats_for_one_forcer.reset_index().rename({"index":"Day index"}, axis=1)
         stats_for_one_forcer = stats_for_one_forcer.set_index(date_table.Year.drop_duplicates().values[:max_date_valid])
-        list_of_stats_for_all_forcers.append(stats_for_one_forcer.drop("Day index",axis=1))
+        list_of_stats_for_all_forcers.append(stats_for_one_forcer)
         if include_ozone:
             stats_for_one_forcer_with_ozone = pd.DataFrame(
                 [list_of_mean_for_all_forcers_with_ozone[forcer_id], list_of_q5_for_all_forcers_with_ozone[forcer_id], list_of_q95_for_all_forcers_with_ozone[forcer_id]],
@@ -714,7 +704,7 @@ for scenario_name in [
                 ).transpose()
             stats_for_one_forcer_with_ozone = stats_for_one_forcer_with_ozone.reset_index().rename({"index":"Day index"}, axis=1)
             stats_for_one_forcer_with_ozone = stats_for_one_forcer_with_ozone.set_index(date_table.Year.drop_duplicates().values[:max_date_valid])
-            list_of_stats_for_all_forcers_with_ozone.append(stats_for_one_forcer_with_ozone.drop("Day index",axis=1))
+            list_of_stats_for_all_forcers_with_ozone.append(stats_for_one_forcer_with_ozone)
 
     # Time
     print(f"Total time: {time.time()-tic} sec.")
@@ -732,7 +722,7 @@ for scenario_name in [
         plt.title(f"{scenario_name}, {forcer_name} without ozone, {epsilon} ppm, {n_iterations}it")
         plt.legend()
         if save_fig:
-            plt.savefig(f"Results/{date}-{scenario_name}-noozone-time-integrated/{forcer_name}-noozone.png")
+            plt.savefig(f'Results/{date}-{scenario_name}-noozone-instantaneous/{forcer_name}-noozone.png')
             plt.close()
         else:
             plt.show()
@@ -747,17 +737,18 @@ for scenario_name in [
             plt.title(f"{scenario_name}, {forcer_name} with ozone, {epsilon} ppm, {n_iterations}it")
             plt.legend()
             if save_fig:
-                plt.savefig(f"Results/{date}-{scenario_name}-withozone-time-integrated/{forcer_name}-withozone.png")
+                plt.savefig(f'Results/{date}-{scenario_name}-withozone-instantaneous/{forcer_name}-withozone.png')
                 plt.close()
             else:
                 plt.show()
 
     if save:
-        pd.concat(list_of_stats_for_all_forcers,axis=1,keys=forcers_data.index).to_csv(f'Results/{date}-{scenario_name}-noozone-time-integrated/{scenario_name}-mean-mctp.csv')
+        pd.concat(list_of_stats_for_all_forcers,axis=1,keys=forcers_data.index).to_csv(f'Results/{date}-{scenario_name}-noozone-instantaneous/{scenario_name}-mean-mctp.csv')
         
         if include_ozone:
-            pd.concat(list_of_stats_for_all_forcers_with_ozone,axis=1,keys=forcers_data.index).to_csv(f'Results/{date}-{scenario_name}-withozone-time-integrated/{scenario_name}-mean-mctp.csv')
+            pd.concat(list_of_stats_for_all_forcers_with_ozone,axis=1,keys=forcers_data.index).to_csv(f'Results/{date}-{scenario_name}-withozone-instantaneous/{scenario_name}-mean-mctp.csv')
            
+
 
 
 # %%

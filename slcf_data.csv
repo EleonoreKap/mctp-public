@@ -1,0 +1,27 @@
+Name,Formula,Category,Subcategory,Radiative efficiency [W m-2 ppb-1],Radiative efficiency [W m-2 kg-1],MIR [g_ozone/g_compound],Lifetime [days],GWP20,GWP100,GTP100
+tropospheric ozone,O3,gas,,0.077,1.124e-12,0.014,23.4
+nitrogen oxides,NOx,gas,,,,,0.55
+carbon monoxide,CO,gas,,0.01,2.004e-14,0.053,67.5
+ethanol,CH3CH2OH,gas,NMVOC,0.044,5.367e-13,1.45,23.5
+acetaldehyde,CH3CHO,gas,NMVOC,0.017,2.166e-13,6.34,4.58,,1.3,
+acetone,C3H6O,gas,NMVOC,0.027,2.609e-13,0.35,41.3,,0.5
+methylethylketone,C4H8O,gas,NMVOC,0.033,2.568e-13,1.43,5.91
+isoprene,C5H8,gas,NMVOC,0.046,3.790e-13,10.28,0.14,,2.7,
+benzene,C6H6,gas,NMVOC,0.003,2.156e-14,0.69,7.96
+trichloroethylene,C2HCl3,gas,NMVOC,0.006,2.563e-14,0.61,5.6
+sulfur dioxide,SO2,gas,,0.018,1.577e-13,,2.59
+ammonia,NH3,gas,,0.061,2.010e-12,,0.48
+HCFC-31,,gas,halocarbon,0.059,4.835e-13,,327.4,286,79.4,14.4
+HCFC-131,,gas,halocarbon,0.101,3.744e-13,,274.5,113,31,4
+HCFC-141a,,gas,halocarbon,0.059,2.831e-13,,180.3,56,15,2
+HCFC-151,,gas,halocarbon,0.031,2.109e-13,,177.8,41,11,2
+HFC-152,,gas,halocarbon,0.058,4.928e-13,,159,77.6,21.5,3.89
+HFC-161,,gas,halocarbon,0.023,2.686e-13,,73,17.4,4.84,0.872
+methylbromide,CH3Br,gas,halocarbon,0.004,2.365e-14,,292
+sulphate,SO42-,aerosol,,,-3.20e-10,,4.5
+nitrate,NO3-,aerosol,,,-2.030e-10,,0.11
+black carbon,,aerosol,carbonaceous aerosol,,1.96e-9,,6.3
+organic carbon,,aerosol,carbonaceous aerosol,,-2.90e-10,,
+carbon dioxide,CO2,gas,,,,,,1,1,1
+methane,CH4,gas,,,1.816003680120088e-13,,4526,81.2,27.9,5.38
+nitrous oxide,N2O,gas,,,3.871529639115559e-13,,41610,273,273,233
